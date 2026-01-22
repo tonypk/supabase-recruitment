@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>简易招聘追踪系统</title>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: sans-serif; max-width: 900px; margin: 40px auto; }
+    h2 { margin-top: 40px; }
+    input, select, button { margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ddd; padding: 6px; }
+  </style>
+</head>
+<body>
+
+<h1>招聘追踪系统（MVP）</h1>
+
+<!-- ================= 登录 ================= -->
+<h2>1️⃣ 登录</h2>
+<input id="email" placeholder="邮箱" />
+<button onclick="login()">发送登录链接</button>
+<p id="login-status"></p>
+
+<!-- ================= 上传简历 ================= -->
+<h2>2️⃣ 上传简历</h2>
+<input id="candidateName" placeholder="候选人姓名" /><br/>
+<input type="file" id="resumeFile" /><br/>
+<input id="jobId" placeholder="岗位ID（UUID）" /><br/>
+<button onclick="uploadResume()">上传简历</button>
+
+<!-- ================= 统计 ================= -->
+<h2>3️⃣ 统计</h2>
+<button onclick="loadStats()">加载统计</button>
+
+<h3>按岗位统计</h3>
+<table id="jobStats"></table>
+
+<h3>按状态统计</h3>
+<table id="statusStats"></table>
+
+<h3>每日新增</h3>
+<table id="dailyStats"></table>
+
+<script>
+/* =================================================
+   0. 配置 Supabase（替换这里）
+================================================= */
+const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co'
+const SUPABASE_ANON_KEY = 'YOUR_PUBLIC_ANON_KEY'
+
+const supabase = supabasejs.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+)
+
+/* =================================================
+   1. 登录（魔法链接）
+================================================= */
+async function login() {
+  const email = document.getElementById('email').value
+  const { error } = await supabase.auth.signInWithOtp({ email })
+  document.getElementById('login-status').innerText =
+    error ? error.message : '登录链接已发送到邮箱'
+}
+
+/* =================================================
+   2. 上传简历（文件 + 数据库）
+================================================= */
+async function uploadResume() {
+  const candidateName = document.getElementById('candidateName').value
+  const file = document.getElementById('resumeFile').files[0]
+  const jobId = document.getElementById('jobId').value
+
+  if (!candidateName || !file || !jobId) {
+    alert('请填写完整信息')
+    return
+  }
+
+  const { data: userData } = await supabase.auth.getUser()
+  const user = userData.user
+  if (!user) {
+    alert('请先登录')
+    return
+  }
+
+  // 1️⃣ 上传文件
+  const ext = file.name.split('.').pop()
+  const fileName = crypto.randomUUID() + '.' + ext
+  const filePath = `${jobId}/${fileName}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('resumes')
+    .upload(filePath, file)
+
+  if (uploadError) {
+    alert(uploadError.message)
+    return
+  }
+
+  // 2️⃣ 写入数据库
+  const { error: insertError } = await supabase
+    .from('resumes')
+    .insert({
+      candidate_name: candidateName,
+      job_id: jobId,
+      file_path: filePath,
+      uploader_id: user.id
+    })
+
+  if (insertError) {
+    alert(insertError.message)
+    return
+  }
+
+  alert('简历上传成功')
+}
+
+/* =================================================
+   3. 统计（直接查 View）
+================================================= */
+async function loadStats() {
+  loadTable('jobStats', 'resume_count_by_job', [
+    'job_title',
+    'resume_count'
+  ])
+
+  loadTable('statusStats', 'resume_count_by_status', [
+    'status',
+    'count'
+  ])
+
+  loadTable('dailyStats', 'resume_daily_count', [
+    'day',
+    'count'
+  ])
+}
+
+async function loadTable(tableId, viewName, columns) {
+  const { data, error } = await supabase
+    .from(viewName)
+    .select('*')
+
+  if (error) {
+    alert(error.message)
+    return
+  }
+
+  const table = document.getElementById(tableId)
+  table.innerHTML = ''
+
+  const header = document.createElement('tr')
+  columns.forEach(col => {
+    const th = document.createElement('th')
+    th.innerText = col
+    header.appendChild(th)
+  })
+  table.appendChild(header)
+
+  data.forEach(row => {
+    const tr = document.createElement('tr')
+    columns.forEach(col => {
+      const td = document.createElement('td')
+      td.innerText = row[col]
+      tr.appendChild(td)
+    })
+    table.appendChild(tr)
+  })
+}
+</script>
+
+</body>
+</html>
