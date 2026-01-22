@@ -15,6 +15,8 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null)
 
   async function login() {
+    if (!email) return alert('Please enter your email')
+
     await supabase.auth.signInWithOtp({
       email,
       options: {
@@ -26,6 +28,7 @@ export default function Home() {
 
   async function upload() {
     if (!file) return alert('No file selected')
+    if (!candidate || !jobId) return alert('Candidate name and Job ID are required')
 
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return alert('Not logged in')
