@@ -19,9 +19,7 @@ export default function Home() {
 
     await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: window.location.origin
-      }
+      options: { emailRedirectTo: window.location.origin }
     })
     alert('Login link sent. Please check your email.')
   }
